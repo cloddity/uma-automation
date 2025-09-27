@@ -7,7 +7,9 @@ from ahk import AHK
 from pynput import keyboard
 from PIL import Image
 import pyscreenshot as ImageGrab
+import winsound 
 
+last_hold_key_time = time.time()
 ahk = AHK()
 
 PIXEL_CHECKS = {
@@ -116,6 +118,23 @@ side_race = False
 claw = False
 ura = False
 fail_out = False
+
+def reset_script():
+    global paused, fail_out, aborted, last_hold_key_time
+    print("[Resetting script to initial state]")
+    paused = False
+    fail_out = False
+    aborted = True
+    last_hold_key_time = time.time()
+
+def watchdog(interval=20):
+    global last_hold_key_time
+    while True:
+        if time.time() - last_hold_key_time > interval:
+            print("The script has stalled.")
+            winsound.Beep(550, 400) 
+            last_hold_key_time = time.time() 
+        time.sleep(1)
 
 def detect_bar_end(y=140, empty_color=(118, 117, 118), threshold=8, x_start=690, x_end=670, step=-4):
     """
@@ -385,6 +404,8 @@ def expand_loops(command):
 
 def hold_key(seq, hold=0.07, pause_delay=0.1):
     global aborted
+    global last_hold_key_time
+    last_hold_key_time = time.time()
 
     print(seq)
     seq = expand_loops(seq)
@@ -414,6 +435,9 @@ def hold_key(seq, hold=0.07, pause_delay=0.1):
                 expected_color = expected["color"]
                 print(f"Waiting for <{key}> pixel match...")
                 while True:
+                    if aborted:
+                        print("Script reset")
+                        return
                     actual = get_color(x, y)
                     if color_match(actual, expected_color):
                         break
@@ -898,6 +922,7 @@ def listen_hotkeys():
         if key == keyboard.Key.f8:
             threading.Thread(target=run_dailies, daemon=True).start()
         elif key == keyboard.Key.f7:
+            threading.Thread(target=watchdog, daemon=True).start()
             threading.Thread(target=run_career, daemon=True).start()
         elif key == keyboard.Key.f6:
             threading.Thread(target=start_career, daemon=True).start()
@@ -911,6 +936,10 @@ def listen_hotkeys():
         elif key == keyboard.Key.f4:
             print("[Exiting]")
             exit()
+        elif key == keyboard.Key.f3:
+            reset_script()
+            time.sleep(5)
+            aborted = False
 
     with keyboard.Listener(on_press=on_press) as listener:
         listener.join()
@@ -918,4 +947,5 @@ def listen_hotkeys():
 if __name__ == "__main__":
     print("F8 = Run dailies | F7 = Continue Career | F6 = Start Career || F9 = Pause | F4 = Exit")
     listen_hotkeys()
+
 
